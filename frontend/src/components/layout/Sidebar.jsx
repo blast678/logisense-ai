@@ -17,7 +17,7 @@ const NAV_ITEMS = [
   { icon: LayoutDashboard, label: "The Pulse", href: "#", active: true },
   { icon: Truck, label: "Fleet View", href: "#" },
   { icon: BrainCircuit, label: "AI Predictions", href: "#", badge: "NEW" },
-  { icon: ShieldAlert, label: "Disruptions", href: "#", badge: 4 },
+  { icon: ShieldAlert, label: "Disruptions", href: "/disruptions", badge: 4 },
   { icon: BarChart3, label: "Analytics", href: "#" },
   { icon: Bell, label: "Alerts", href: "#", badge: 7 },
   { icon: Settings, label: "Settings", href: "#" },
