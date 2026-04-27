@@ -1,103 +1,107 @@
 import math
+import searoute as sr
+from shapely.geometry import shape, Point
 
-# 1. THE REAL WORLD ROUTES 
-PRIMARY_ROUTE = [
-    {"name": "Mumbai", "lat": 19.0760, "lng": 72.8777},
-    {"name": "Navi Mumbai", "lat": 19.0330, "lng": 73.0297},
-    {"name": "Expressway Toll (Khandala)", "lat": 18.7500, "lng": 73.4000},
-    {"name": "Pune", "lat": 18.5204, "lng": 73.8567}
-]
-
-ALTERNATE_ROUTE = [
-    {"name": "Mumbai", "lat": 19.0760, "lng": 72.8777},
-    {"name": "Panvel", "lat": 18.9894, "lng": 73.1175},
-    {"name": "Old Highway (Khopoli)", "lat": 18.7833, "lng": 73.3500},
-    {"name": "Pune", "lat": 18.5204, "lng": 73.8567}
-]
-
-# 2. LIVE FLEET DATA (Mocked for MVP)
+# 1. THE ENTERPRISE DATABUS (Our live shipments)
 ACTIVE_SHIPMENTS = [
     {
         "id": "TRK-001",
-        "cargo": "Vaccines & Pharmaceuticals",
-        "priority": "CRITICAL",
-        "current_lat": 19.0330, # Near Navi Mumbai
-        "current_lng": 73.0297
+        "mode": "terrestrial",
+        "cargo": "Critical Medical Supplies",
+        "priority": 100, # Critical
+        "start": [72.8777, 19.0760], # Mumbai
+        "end": [77.1025, 28.7041],   # Delhi
     },
     {
-        "id": "TRK-002", 
+        "id": "SHP-992", 
+        "mode": "maritime",
         "cargo": "Consumer Electronics",
-        "priority": "HIGH",
-        "current_lat": 19.0760, # Still in Mumbai
-        "current_lng": 72.8777
-    },
-    {
-        "id": "TRK-003", 
-        "cargo": "Office Furniture",
-        "priority": "LOW",
-        "current_lat": 19.0760,
-        "current_lng": 72.8777
+        "priority": 40, # Standard
+        "start": [121.4737, 31.2304], # Shanghai
+        "end": [72.9460, 18.9400],    # JNPT Mumbai
     }
 ]
 
-def haversine(lat1, lng1, lat2, lng2):
-    R = 6371 
-    dlat = math.radians(lat2 - lat1)
-    dlng = math.radians(lng2 - lng1)
-    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlng/2)**2
-    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+# 2. THE FINANCIAL PRICING ENGINE
+def calculate_logistics_cost(mode, distance_km, action_type):
+    """
+    Calculates exact financial impact based on physics and current commodity prices.
+    """
+    diesel_price_per_liter = 1.10
+    bunker_price_per_ton = 600.0
 
-def calculate_detour(threat_gps=None):
+    if mode == "terrestrial":
+        # Trucks burn ~0.35L per KM
+        base_cost = distance_km * 0.35 * diesel_price_per_liter
+        # Detours incur a 30% penalty due to sub-optimal traffic conditions
+        return base_cost * 1.3 if action_type == "DETOUR" else base_cost 
     
-    # Base response
-    response = {
-        "status": "Clear",
-        "optimal_route": " -> ".join([n["name"] for n in PRIMARY_ROUTE]),
-        "fleet_status": []
-    }
+    elif mode == "maritime":
+        # Ships burn ~0.15 Tons per KM at standard cruising speed
+        base_cost = distance_km * 0.15 * bunker_price_per_ton
+        if action_type == "DETOUR":
+            return base_cost * 1.5 # Massive fuel burn for ocean detours
+        elif action_type == "SLOW_STEAM":
+            # Slowing down by 20% drastically cuts fuel burn (F ∝ v^3)
+            return base_cost * 0.6 
+        return base_cost
 
-    if threat_gps:
-        threat_lat = threat_gps['latitude']
-        threat_lng = threat_gps['longitude']
-        is_route_blocked = False
+# 3. THE SPATIAL TRIAGE ENGINE
+def evaluate_fleet_resilience(threat_lng, threat_lat):
+    """
+    Evaluates all shipments against a detected threat and outputs optimization commands.
+    """
+    response_payload = {"fleet_status": []}
+    threat_pt = Point(threat_lng, threat_lat)
 
-        # 1. Check if the road itself is blocked
-        for node in PRIMARY_ROUTE:
-            distance = haversine(threat_lat, threat_lng, node['lat'], node['lng'])
-            if distance < 15.0: 
-                is_route_blocked = True
-                response["status"] = "Rerouted"
-                response["optimal_route"] = " -> ".join([n["name"] for n in ALTERNATE_ROUTE])
-                break 
+    for shipment in ACTIVE_SHIPMENTS:
+        # Step A: Generate Base Geometry
+        if shipment["mode"] == "maritime":
+            # Real ocean routing calculation
+            route_geojson = sr.searoute(shipment["start"], shipment["end"], units="km")
+            route_geom = shape(route_geojson['geometry'])
+            distance_km = route_geojson['properties']['length']
+        else:
+            # Simulated terrestrial route (straight line for prototype speed)
+            route_geojson = {
+                "type": "Feature",
+                "geometry": {"type": "LineString", "coordinates": [shipment["start"], [74.0, 22.0], shipment["end"]]}
+            }
+            route_geom = shape(route_geojson['geometry'])
+            distance_km = 1400.0 
 
-        # 2. If blocked, calculate RISK SCORE for each specific truck
-        if is_route_blocked:
-            priority_weights = {"CRITICAL": 1.0, "HIGH": 0.7, "LOW": 0.3}
-            
-            for truck in ACTIVE_SHIPMENTS:
-                # How close is the truck to the disaster?
-                dist_to_disaster = haversine(truck['current_lat'], truck['current_lng'], threat_lat, threat_lng)
-                
-                # Math: High priority + Close proximity = Massive Risk Score
-                base_score = priority_weights[truck['priority']] * 100
-                proximity_multiplier = max(0.1, 1 - (dist_to_disaster / 100)) # Closer = higher multiplier
-                
-                final_risk_score = round(base_score * proximity_multiplier)
-                
-                # Determine action based on score
-                if final_risk_score > 80:
-                    action = "IMMEDIATE REROUTE - PING DRIVER"
-                elif final_risk_score > 50:
-                    action = "PREPARE ALTERNATE ROUTE"
-                else:
-                    action = "HOLD AT WAREHOUSE"
-                    
-                response["fleet_status"].append({
-                    "truck_id": truck['id'],
-                    "cargo": truck['cargo'],
-                    "distance_to_threat_km": round(dist_to_disaster, 1),
-                    "risk_score": final_risk_score,
-                    "action": action
-                })
+        # Step B: Spatial Collision Detection (50km blast radius)
+        distance_to_threat = route_geom.distance(threat_pt)
+        is_threatened = distance_to_threat < 0.5 # ~50km in decimal degrees
 
-    return response
+        # Step C: Context-Aware Cost-Benefit Analysis
+        action = "PROCEED NORMALLY"
+        final_cost = calculate_logistics_cost(shipment["mode"], distance_km, "STANDARD")
+
+        if is_threatened:
+            detour_cost = calculate_logistics_cost(shipment["mode"], distance_km, "DETOUR")
+            wait_cost = calculate_logistics_cost(shipment["mode"], distance_km, "SLOW_STEAM" if shipment["mode"] == "maritime" else "STANDARD")
+
+            if shipment["priority"] >= 80:
+                # Critical cargo must arrive, regardless of detour fuel cost
+                action = "IMMEDIATE REROUTE"
+                final_cost = detour_cost
+            elif wait_cost < detour_cost:
+                # Prevent secondary cascades by holding non-critical cargo
+                action = "SLOW STEAM / HOLD" if shipment["mode"] == "maritime" else "HOLD AT WAREHOUSE"
+                final_cost = wait_cost
+
+        # Step D: Package the data for the frontend Mapbox UI
+        response_payload["fleet_status"].append({
+            "truck_id": shipment["id"],
+            "cargo": shipment["cargo"],
+            "mode": shipment["mode"],
+            "action": action,
+            "risk_score": shipment["priority"] if is_threatened else 0,
+            "estimated_cost": f"${round(final_cost, 2):,}", 
+            "safe_geojson": route_geojson,
+            "lat": shipment["start"][1], 
+            "lng": shipment["start"][0]
+        })
+
+    return response_payload

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState } from "react";
 import Sidebar from "../components/layout/Sidebar";
 import MapComponent from "../components/map/MapComponent";
+
+import { useState, useEffect } from "react"; // <-- Add useEffect here
 import {
   Package,
   ShieldAlert,
@@ -133,14 +134,60 @@ const TREND_ICON = {
 export default function DashboardPage() {
   const [selectedTruck, setSelectedTruck] = useState(null);
   const [alertFilter, setAlertFilter] = useState("all");
-  const [lastRefresh] = useState(() =>
-    new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })
-  );
+  const [liveTrucks, setLiveTrucks] = useState(MOCK_TRUCKS); // Starts with mocks so the screen isn't blank
+  const [liveAlerts, setLiveAlerts] = useState(MOCK_ALERTS); 
+  const [isLoading, setIsLoading] = useState(false);
+  // Start with a static placeholder so server and client match perfectly
+  const [lastRefresh, setLastRefresh] = useState("--:--:--");
 
+  // Once the page loads in the browser, update it to the real time
+  useEffect(() => {
+    setLastRefresh(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+  }, []);
+  // 2. The Integration Function (Hits your FastAPI backend)
+  const fetchLiveLogistics = async () => {
+  setIsLoading(true);
+  try {
+    const res = await fetch("http://localhost:8000/api/trigger-live-hunt"); 
+    const data = await res.json();
+    
+    if (data.routing_engine_decision?.fleet_status) {
+      const updatedTrucks = data.routing_engine_decision.fleet_status.map(t => ({
+        id: t.truck_id,
+        lat: t.lat, 
+        lng: t.lng,
+        status: t.action.includes("REROUTE") ? "at-risk" : t.action.includes("HOLD") ? "delayed" : "on-time",
+        destination: t.cargo, 
+        action: t.action,
+        mode: t.mode,           // IMPORTANT: Needed for map layer styling
+        safe_geojson: t.safe_geojson, // IMPORTANT: The physical route line
+        estimated_cost: t.estimated_cost // IMPORTANT: For the popup card
+      }));
+      setLiveTrucks(updatedTrucks);
+    }
+
+    if (data.active_threats) {
+      const updatedAlerts = data.active_threats.map((threat, index) => ({
+        id: `LIVE-ALT-${index}`,
+        severity: "critical",
+        icon: "🚨",
+        title: threat.location,
+        detail: "Preemptive disruption detected via spatial indexing.",
+        geojson_polygon: threat.geojson_polygon, // IMPORTANT: The red threat zone
+        time: "Just now",
+        trucks: data.routing_engine_decision?.fleet_status
+          ?.filter(t => !t.action.includes("PROCEED NORMALLY"))
+          .map(t => t.truck_id) || []
+      }));
+      setLiveAlerts(updatedAlerts);
+    }
+  } catch (error) { console.error(error); } 
+  finally { setIsLoading(false); }
+};
   const filteredAlerts =
     alertFilter === "all"
-      ? MOCK_ALERTS
-      : MOCK_ALERTS.filter((a) => a.severity === alertFilter);
+      ? liveAlerts
+      : liveAlerts.filter((a) => a.severity === alertFilter);
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-[#080c13] font-sans text-white">
@@ -173,9 +220,13 @@ export default function DashboardPage() {
               <Clock size={11} />
               {lastRefresh} IST
             </div>
-            <button className="flex items-center gap-1.5 text-[#4a6580] hover:text-white text-[11px] border border-[#1e2a3a] rounded-md px-2.5 py-1.5 hover:border-[#2a3a4d] transition-colors">
-              <RefreshCw size={12} />
-              Refresh
+            <button 
+              onClick={fetchLiveLogistics}
+              disabled={isLoading}
+              className={`flex items-center gap-1.5 text-[#4a6580] hover:text-white text-[11px] border border-[#1e2a3a] rounded-md px-2.5 py-1.5 hover:border-[#2a3a4d] transition-colors ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <RefreshCw size={12} className={isLoading ? "animate-spin text-[#38bdf8]" : ""} />
+              {isLoading ? "Hunting..." : "Refresh"}
             </button>
             <button className="relative text-[#4a6580] hover:text-white p-1.5 rounded-md hover:bg-[#111825] transition-colors">
               <Bell size={16} />
@@ -233,7 +284,8 @@ export default function DashboardPage() {
             </div>
             <div className="flex-1 min-h-0">
               <MapComponent
-                trucks={MOCK_TRUCKS}
+                trucks={liveTrucks} 
+                activeAlerts={liveAlerts}
                 selectedTruckId={selectedTruck}
                 onTruckSelect={setSelectedTruck}
               />
@@ -334,10 +386,10 @@ export default function DashboardPage() {
             <div className="shrink-0 border border-[#1e2a3a] rounded-xl bg-[#0b0f1a] overflow-hidden">
               <div className="px-3 py-2 border-b border-[#1e2a3a] flex items-center justify-between">
                 <span className="text-[#4a6580] text-[10px] font-semibold uppercase tracking-widest">Fleet Roster</span>
-                <span className="text-[#2a3a4d] text-[9px] font-mono">{MOCK_TRUCKS.length} vehicles</span>
+                <span className="text-[#2a3a4d] text-[9px] font-mono">{liveTrucks.length} vehicles</span>
               </div>
               <div className="max-h-[168px] overflow-y-auto divide-y divide-[#111825]">
-                {MOCK_TRUCKS.map((truck) => {
+                {liveTrucks.map((truck) => {
                   const sev = {
                     "on-time": "text-emerald-400 bg-emerald-500/10",
                     delayed:   "text-amber-400 bg-amber-500/10",
