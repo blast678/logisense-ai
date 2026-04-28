@@ -1,5 +1,20 @@
 # app/services/notifier.py
 
+def format_whatsapp_alert(driver_name, threat_type, location, action_required):
+    """
+    Generates a WhatsApp-formatted markdown message for the driver.
+    """
+    msg = f"🚛 *LogiSense AI Fleet Alert: {driver_name}*\n"
+    msg += "-----------------------------------\n"
+    msg += f"🚨 *URGENT ACTION:* {action_required}\n\n"
+    msg += f"📍 *Reported Location:* {location}\n"
+    msg += f"📰 *Live News Report:* {threat_type}\n\n"
+    msg += "👉 *DRIVER ACTION REQUIRED:*\n"
+    msg += "Please review the alert above. Reply *BLOCKED* if your route is affected, or *CLEAR* if you can proceed safely."
+    
+    return msg
+
+
 def generate_whatsapp_payload(truck_id, action, risk_score, threat_location, threat_reason, source_url):
     """
     Generates a WhatsApp-formatted markdown message for the driver.

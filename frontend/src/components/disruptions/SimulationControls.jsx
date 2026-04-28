@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   CloudRain,
   Users,
@@ -11,9 +11,22 @@ import {
   MapPin,
   ChevronDown,
   Info,
+  Loader2,
+  CheckCircle2,
 } from "lucide-react";
 
 const DISRUPTION_TYPES = [
+  {
+    value: "none",
+    label: "None / Baseline",
+    icon: CheckCircle2,
+    color: "text-emerald-400",
+    bg: "bg-emerald-500/10",
+    border: "border-emerald-500/30",
+    desc: "Baseline Digital Twin active",
+    severity: "Normal",
+    sevColor: "text-emerald-400",
+  },
   {
     value: "flood",
     label: "Flood",
@@ -90,8 +103,22 @@ export default function SimulationControls({
   onRunSimulation,
   isRunning,
   hasResult,
+  onSelectPreset,
+  origin,
+  setOrigin,
+  destination,
+  setDestination,
 }) {
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [loadingText, setLoadingText] = useState("Geocoding...");
+
+  useEffect(() => {
+    if (!isRunning) return;
+    setLoadingText("Geocoding...");
+    const t1 = setTimeout(() => setLoadingText("Fetching Mapbox..."), 800);
+    const t2 = setTimeout(() => setLoadingText("Computing Detour..."), 1600);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  }, [isRunning]);
 
   const selected = DISRUPTION_TYPES.find((d) => d.value === disruptionType) ?? DISRUPTION_TYPES[0];
   const SelectedIcon = selected.icon;
@@ -110,56 +137,46 @@ export default function SimulationControls({
         </div>
       </div>
 
-      {/* Step 1 — Place disruption */}
+      {/* Step 1 — Route Ends */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
           <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">1</span>
-          <p className="text-slate-300 text-xs font-semibold">Place Disruption on Map</p>
+          <p className="text-slate-300 text-xs font-semibold">Define Route Endpoints</p>
         </div>
-
-        <div
-          className={`rounded-xl border px-3 py-3 flex items-center gap-3 transition-all duration-200 ${
-            blockadeCoords
-              ? "border-red-500/40 bg-red-500/8"
-              : "border-slate-700 bg-slate-800/50 border-dashed"
-          }`}
-        >
-          <div className={`w-8 h-8 rounded-lg flex items-center justify-center flex-shrink-0 transition-colors ${
-            blockadeCoords ? "bg-red-500/15 border border-red-500/30" : "bg-slate-700/50"
-          }`}>
-            <MapPin size={15} className={blockadeCoords ? "text-red-400" : "text-slate-500"} />
-          </div>
-          <div className="flex-1 min-w-0">
-            {blockadeCoords ? (
-              <>
-                <p className="text-red-400 text-[10px] font-bold uppercase tracking-wider">Disruption Placed</p>
-                <p className="text-slate-400 text-[11px] font-mono mt-0.5">
-                  {blockadeCoords.lat.toFixed(4)}°N, {blockadeCoords.lng.toFixed(4)}°E
-                </p>
-              </>
-            ) : (
-              <>
-                <p className="text-slate-400 text-xs font-medium">No location selected</p>
-                <p className="text-slate-600 text-[10px]">Click on the map to drop a pin</p>
-              </>
-            )}
-          </div>
-          {blockadeCoords && (
-            <button
-              onClick={onClearBlockade}
-              className="flex-shrink-0 text-slate-500 hover:text-red-400 p-1 rounded hover:bg-red-500/10 transition-colors"
-              title="Clear pin"
-            >
-              <RotateCcw size={13} />
-            </button>
-          )}
+        <div className="flex flex-col gap-2">
+          <input type="text" value={origin} onChange={e => setOrigin(e.target.value)} className="bg-slate-800 text-white px-3 py-2 rounded-xl text-xs border border-slate-700 outline-none focus:border-indigo-500" placeholder="Origin" />
+          <input type="text" value={destination} onChange={e => setDestination(e.target.value)} className="bg-slate-800 text-white px-3 py-2 rounded-xl text-xs border border-slate-700 outline-none focus:border-indigo-500" placeholder="Destination" />
         </div>
       </div>
 
-      {/* Step 2 — Select disruption type */}
+      {/* Step 2 — Select Scenario */}
       <div className="space-y-2">
         <div className="flex items-center gap-1.5">
           <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">2</span>
+          <p className="text-slate-300 text-xs font-semibold">Select Preset Scenario</p>
+        </div>
+        <div className="flex flex-col gap-2">
+           {[
+             { id: "none", name: "No Disruption", loc: "Baseline Route", lat: 18.7522, lng: 73.3735 },
+             { id: "flood", name: "Monsoon Flood", loc: "Khandala Ghat", lat: 18.7522, lng: 73.3735 },
+             { id: "protest", name: "Highway Protest", loc: "Shahapur NH160", lat: 19.4497, lng: 73.3341 },
+             { id: "fire", name: "Chemical Spill", loc: "JNPT Exit", lat: 18.9500, lng: 72.9500 },
+           ].map(scen => (
+             <button
+               key={scen.loc}
+               onClick={() => onSelectPreset(scen)}
+               className={`px-3 py-2 rounded-xl text-left border text-xs font-medium transition-all ${blockadeCoords?.name === scen.loc ? "bg-indigo-500/20 border-indigo-500/50 text-indigo-300" : "bg-slate-800/50 border-slate-700 text-slate-400 hover:bg-slate-800"}`}
+             >
+               <span className="font-bold text-slate-200">{scen.name}</span> <span className="text-slate-500">({scen.loc})</span>
+             </button>
+           ))}
+        </div>
+      </div>
+
+      {/* Step 3 — Disruption Type */}
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5">
+          <span className="w-4 h-4 rounded-full bg-indigo-600 text-white text-[9px] font-bold flex items-center justify-center flex-shrink-0">3</span>
           <p className="text-slate-300 text-xs font-semibold">Disruption Type</p>
         </div>
 
@@ -251,6 +268,7 @@ export default function SimulationControls({
       <button
         onClick={onRunSimulation}
         disabled={!canRun || isRunning}
+        title="Analyze multifaceted data to predict cascading delays."
         className={`
           relative w-full py-3.5 rounded-xl font-bold text-sm flex items-center justify-center gap-2.5
           transition-all duration-200 overflow-hidden
@@ -262,13 +280,13 @@ export default function SimulationControls({
       >
         {isRunning ? (
           <>
-            <div className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin" />
-            <span>Computing Routes…</span>
+            <Loader2 size={16} className="animate-spin text-white" />
+            <span>{loadingText}</span>
           </>
         ) : (
           <>
             <Play size={16} strokeWidth={2.5} />
-            <span>Run Simulation</span>
+            <span>Run Digital Twin Simulation</span>
           </>
         )}
         {/* shimmer on hover */}

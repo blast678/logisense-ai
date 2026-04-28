@@ -1,16 +1,16 @@
 import os
 import json
-import google.generativeai as genai
+from google import genai
+from google.genai import types
 from app.schemas.disruptions import DisruptionAnalysis
 from dotenv import load_dotenv
 
 load_dotenv()
-genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
+client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 def analyze_unstructured_alert(text_alert: str) -> dict:
     """Uses Gemini 2.5 Flash to rapidly extract structured data from unstructured text."""
-    
-    model = genai.GenerativeModel('models/gemini-2.5-flash')
+
     
     # 👇 FIX 1: Convert Python dict to proper JSON string for the prompt
     schema_str = json.dumps(DisruptionAnalysis.model_json_schema())
@@ -31,9 +31,10 @@ def analyze_unstructured_alert(text_alert: str) -> dict:
     """
     
     try:
-        response = model.generate_content(
-            prompt,
-            generation_config=genai.GenerationConfig(response_mime_type="application/json")
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=prompt,
+            config=types.GenerateContentConfig(response_mime_type="application/json")
         )
         
         # 👇 FIX 2: Bulletproof JSON parsing (strips hidden markdown tags)

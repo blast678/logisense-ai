@@ -12,19 +12,21 @@ import {
   Zap,
 } from "lucide-react";
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
-  { icon: LayoutDashboard, label: "The Pulse", href: "#", active: true },
-  { icon: Truck, label: "Fleet View", href: "#" },
-  { icon: BrainCircuit, label: "AI Predictions", href: "#", badge: "NEW" },
+  { icon: LayoutDashboard, label: "The Pulse", href: "/" },
+  { icon: Truck, label: "Fleet View", href: "/fleet" },
+  { icon: BrainCircuit, label: "AI Predictions", href: "/predictions", badge: "NEW" },
   { icon: ShieldAlert, label: "Disruptions", href: "/disruptions", badge: 4 },
-  { icon: BarChart3, label: "Analytics", href: "#" },
-  { icon: Bell, label: "Alerts", href: "#", badge: 7 },
-  { icon: Settings, label: "Settings", href: "#" },
+  { icon: BarChart3, label: "Analytics", href: "/analytics" },
+  { icon: Bell, label: "Alerts", href: "/alerts", badge: 7 },
+  { icon: Settings, label: "Settings", href: "/settings" },
 ];
 
 export default function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
+  const pathname = usePathname();
 
   return (
     <aside
@@ -75,7 +77,9 @@ export default function Sidebar() {
             Navigation
           </p>
         )}
-        {NAV_ITEMS.map(({ icon: Icon, label, href, active, badge }) => (
+        {NAV_ITEMS.map(({ icon: Icon, label, href, badge }) => {
+          const active = pathname === href;
+          return (
           <a
             key={label}
             href={href}
@@ -112,7 +116,7 @@ export default function Sidebar() {
               </>
             )}
           </a>
-        ))}
+        )})}
       </nav>
 
       {/* User */}

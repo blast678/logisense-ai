@@ -1,6 +1,27 @@
 from ortools.constraint_solver import routing_enums_pb2
 from ortools.constraint_solver import pywrapcp
 
+# ---------------------------------------------------------------------------
+# HIGH-FIDELITY GPS COORDINATE ARRAYS
+# These drive the curved road rendering in Mapbox on the frontend.
+# ---------------------------------------------------------------------------
+
+# Realistic curves for Mumbai-Pune Expressway (NH-48 / Node 2)
+EXPRESSWAY_COORDS = [
+    {"lat": 19.0330, "lng": 73.0297}, {"lat": 18.9800, "lng": 73.1000},
+    {"lat": 18.9067, "lng": 73.1706}, {"lat": 18.8235, "lng": 73.2842},
+    {"lat": 18.7500, "lng": 73.4000}, {"lat": 18.7481, "lng": 73.4072},
+    {"lat": 18.6655, "lng": 73.5855}, {"lat": 18.5204, "lng": 73.8567}
+]
+
+# Realistic curves for NH-48 Old Highway Detour (Node 3)
+OLD_HIGHWAY_COORDS = [
+    {"lat": 19.0330, "lng": 73.0297}, {"lat": 18.9067, "lng": 73.1706},
+    {"lat": 18.8833, "lng": 73.2167}, {"lat": 18.8150, "lng": 73.3180},
+    {"lat": 18.7650, "lng": 73.3450}, {"lat": 18.7000, "lng": 73.4500},
+    {"lat": 18.6800, "lng": 73.6000}, {"lat": 18.5204, "lng": 73.8567}
+]
+
 def create_data_model(blocked_location=None):
     """Stores the data for the routing problem."""
     data = {}
@@ -54,24 +75,37 @@ def calculate_detour(blocked_location=None):
     if solution:
         index = routing.Start(0)
         route = []
+        route_nodes = []
         route_time = 0
-        
+
         # Node mapping for human-readable output
         node_names = {0: "Mumbai", 1: "Panvel", 2: "Expressway", 3: "Old Highway", 4: "Pune"}
-        
+
         while not routing.IsEnd(index):
             node_id = manager.IndexToNode(index)
             route.append(node_names[node_id])
+            route_nodes.append(node_id)
             previous_index = index
             index = solution.Value(routing.NextVar(index))
             route_time += routing.GetArcCostForVehicle(previous_index, index, 0)
-            
-        route.append(node_names[manager.IndexToNode(index)]) # Add destination
-        
+
+        route.append(node_names[manager.IndexToNode(index)])  # Add destination
+
+        # Determine which physical road was chosen and return matching GPS coords.
+        # Node 2 = Expressway; Node 3 = Old Highway (chosen when Expressway is blocked).
+        if 3 in route_nodes:
+            print("🗺️  OR-TOOLS chose: Old Highway (Node 3) — returning detour coordinates")
+            route_coordinates = OLD_HIGHWAY_COORDS
+        else:
+            print("🗺️  OR-TOOLS chose: Expressway (Node 2) — returning expressway coordinates")
+            route_coordinates = EXPRESSWAY_COORDS
+
         return {
             "status": "Success",
             "optimal_route": " -> ".join(route),
-            "estimated_time_minutes": route_time
+            "estimated_time_minutes": route_time,
+            "route_coordinates": route_coordinates,      # ← NEW: GPS arrays for Mapbox
+            "via_node": "Old Highway" if 3 in route_nodes else "Expressway",
         }
     else:
-        return {"status": "Failed", "message": "No route found."}
+        return {"status": "Failed", "message": "No route found.", "route_coordinates": []}
