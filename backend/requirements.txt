@@ -38,8 +38,8 @@ google-resumable-media==2.8.2
 googleapis-common-protos==1.74.0
 googlemaps==4.10.0
 grpc-google-iam-v1==0.14.4
-grpcio==1.71.2
-grpcio-status==1.71.2
+grpcio>=1.71.2
+grpcio-status>=1.71.2
 h11==0.16.0
 h2==4.3.0
 hpack==4.1.0
