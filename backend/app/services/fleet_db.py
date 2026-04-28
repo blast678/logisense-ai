@@ -28,9 +28,10 @@ class FleetDatabase:
         """Seeds the Supabase Postgres DB for the demo if it's empty."""
         if not self.supabase: return
         
-        response = self.supabase.table('active_shipments').select("id").limit(1).execute()
-        if not response.data:
-            print("[SYSTEM] Seeding Supabase PostgreSQL with initial fleet state...")
+        try:
+            response = self.supabase.table('active_shipments').select("id").limit(1).execute()
+            if not response.data:
+                print("[SYSTEM] Seeding Supabase PostgreSQL with initial fleet state...")
             
             initial_truck = {
                 "id": "TRK-001", "truck_id": "TRK-001", "mode": "terrestrial",
@@ -47,6 +48,10 @@ class FleetDatabase:
             # Using JSONB payload column to mimic NoSQL flexibility
             self.supabase.table('active_shipments').upsert({"id": "TRK-001", "payload": initial_truck}).execute()
             self.supabase.table('active_shipments').upsert({"id": "SHP-991", "payload": initial_ship}).execute()
+        except Exception as e:
+            print(f"⚠️ SUPABASE ERROR during initialization: {e}")
+            print("Server will continue booting in Offline Mode (Mocked).")
+            self.supabase = None
 
     def get_all_active_shipments(self) -> list:
         """Simulates SELECT * FROM shipments WHERE status = 'active'"""
