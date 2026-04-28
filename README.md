@@ -63,16 +63,24 @@ logisense-ai/
 │   ├── .env                       # Backend secrets (DO NOT COMMIT)
 │   └── requirements.txt           # Python dependencies
 │
-├── frontend/                      # React / Next.js Command Center
+├── frontend/                   # React / Next.js Command Center
 │   ├── src/
-│   │   ├── assets/                # Images, icons, static files
-│   │   ├── components/            # Reusable UI (Map views, Alert cards)
-│   │   ├── pages/                 # Main views (Dispatcher Dashboard, Sandbox)
-│   │   ├── services/              # API callers (Axios/Fetch to FastAPI)
+│   │   ├── app/                # Next.js App Router (Routing)
+│   │   │   ├── disruptions/    # Disruptions Simulator Page
+│   │   │   ├── fleet/          # Fleet management views
+│   │   │   ├── sandbox/        # Sandbox/Experimentation
+│   │   │   ├── layout.jsx      # Root layout / Global wrappers
+│   │   │   └── page.jsx        # Home / Dashboard
+│   │   ├── components/         # Reusable UI Components
+│   │   │   ├── dashboard/      # Dashboard widgets and cards
+│   │   │   ├── disruptions/    # Simulation controls and results
+│   │   │   ├── layout/         # Sidebar / Navigation
+│   │   │   ├── map/            # MapComponent (React-Leaflet)
+│   │   │   └── ui/             # Shared UI elements
+│   │   ├── services/           # API callers
 │   │   │   └── api.js
-│   │   ├── App.jsx
-│   │   └── main.jsx
-│   ├── package.json               # Node dependencies
-│   └── vite.config.js             # Build configuration
+│   │   └── global.css          # Tailwind and global styles
+│   ├── package.json            # Node dependencies
+│   └── next.config.js          # Next.js build configuration
 │
 └── .gitignore                     # Git ignore rules
