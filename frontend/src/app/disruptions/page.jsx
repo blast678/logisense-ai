@@ -150,7 +150,7 @@ export default function DisruptionsPage() {
     setSimulationResult(null);
 
     try {
-      const res = await fetch("http://localhost:8000/api/v1/disruptions/simulate", {
+      const res = await fetch("https://logisense-ai.onrender.com/api/disruptions/simulate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
@@ -164,7 +164,7 @@ export default function DisruptionsPage() {
       // fallback in case v1 is not used
       let data;
       if (!res.ok) {
-        const resFb = await fetch("http://localhost:8000/api/disruptions/simulate", {
+        const resFb = await fetch("https://logisense-ai.onrender.com/api/disruptions/simulate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ 

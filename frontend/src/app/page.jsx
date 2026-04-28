@@ -142,7 +142,7 @@ export default function DashboardPage() {
 
     setIsLoading(true);
     try {
-      const res = await fetch("http://localhost:8000/api/trigger-live-hunt");
+      const res = await fetch("https://logisense-ai.onrender.com/api/disruptions/trigger-live-hunt");
       if (!res.ok) throw new Error(`Backend returned ${res.status}`);
       const data = await res.json();
 
