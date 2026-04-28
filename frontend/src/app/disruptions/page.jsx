@@ -118,6 +118,8 @@ export default function DisruptionsPage() {
   const [blockadeCoords, setBlockadeCoords]       = useState(null);
   const [simulationResult, setSimulationResult]  = useState(null);
   const [isRunning, setIsRunning]                = useState(false);
+  const [origin, setOrigin]                      = useState("Mumbai");
+  const [destination, setDestination]            = useState("Pune");
 
   const handleMapClick = useCallback((coords) => {
     setBlockadeCoords(coords);
@@ -127,6 +129,12 @@ export default function DisruptionsPage() {
 
   const handleClearBlockade = useCallback(() => {
     setBlockadeCoords(null);
+    setSimulationResult(null);
+  }, []);
+
+  const handleSelectPreset = useCallback((scen) => {
+    setDisruptionType(scen.id);
+    setBlockadeCoords({ lat: scen.lat, lng: scen.lng, name: scen.loc });
     setSimulationResult(null);
   }, []);
 
@@ -141,35 +149,58 @@ export default function DisruptionsPage() {
     setIsRunning(true);
     setSimulationResult(null);
 
-    // ── Simulated network latency ──
-    await new Promise((resolve) => setTimeout(resolve, 2200));
+    try {
+      const res = await fetch("http://localhost:8000/api/v1/disruptions/simulate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          origin, 
+          destination, 
+          scenario_lat: blockadeCoords.lat, 
+          scenario_lng: blockadeCoords.lng, 
+          disruption_type: disruptionType 
+        }),
+      });
+      // fallback in case v1 is not used
+      let data;
+      if (!res.ok) {
+        const resFb = await fetch("http://localhost:8000/api/disruptions/simulate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ 
+            origin, 
+            destination, 
+            scenario_lat: blockadeCoords.lat, 
+            scenario_lng: blockadeCoords.lng, 
+            disruption_type: disruptionType 
+          }),
+        });
+        data = await resFb.json();
+      } else {
+        data = await res.json();
+      }
 
-    // ── Mock response (replace with real fetch to /api/simulate) ──
-    // const res = await fetch("/api/simulate", {
-    //   method: "POST",
-    //   headers: { "Content-Type": "application/json" },
-    //   body: JSON.stringify({ disruptionType, blockadeCoords, routeId: "NH-48-DEL-KOL" }),
-    // });
-    // const data = await res.json();
+      setSimulationResult({
+        originalGeojson: data.original_route,
+        safeGeojson: data.safe_route,
+        original: {
+          time: data.metrics?.orig_duration_hrs ?? 14.5,
+          distance: Math.round(data.metrics?.orig_distance_km ?? 1480),
+          via: data.metrics?.orig_via ? [data.metrics.orig_via] : ["Primary Corridor"],
+        },
+        optimized: {
+          time: data.metrics?.safe_duration_hrs ?? 12.2,
+          distance: Math.round(data.metrics?.safe_distance_km ?? 1412),
+          co2Saved: data.metrics?.co2_saved ?? 18.4,
+          via: data.metrics?.safe_via ? [data.metrics.safe_via] : ["Alternative Route"],
+        },
+        rationale: data.rationale,
+        bbox: data.metrics?.bbox,
+      });
+    } catch (e) {
+      console.error(e);
+    }
 
-    const mockResponse = {
-      originalPath:  ROUTE_PATHS.original,
-      optimizedPath: ROUTE_PATHS.optimized,
-      original: {
-        time:     14.5,
-        distance: 1480,
-        via:      ["Agra", "Kanpur", "Varanasi"],
-      },
-      optimized: {
-        time:     12.2,
-        distance: 1412,
-        co2Saved: 18.4,
-        via:      ["Mainpuri bypass", "Gorakhpur", "Patna"],
-      },
-      rationale: DISRUPTION_RATIONALE[disruptionType] ?? DISRUPTION_RATIONALE.flood,
-    };
-
-    setSimulationResult(mockResponse);
     setIsRunning(false);
   }, [blockadeCoords, disruptionType]);
 
@@ -235,6 +266,11 @@ export default function DisruptionsPage() {
                 onRunSimulation={handleRunSimulation}
                 isRunning={isRunning}
                 hasResult={!!simulationResult}
+                onSelectPreset={handleSelectPreset}
+                origin={origin}
+                setOrigin={setOrigin}
+                destination={destination}
+                setDestination={setDestination}
               />
             </div>
           </div>
@@ -246,9 +282,13 @@ export default function DisruptionsPage() {
               <MapComponent
                 onMapClick={handleMapClick}
                 blockadeCoords={blockadeCoords}
-                originalPath={simulationResult?.originalPath ?? []}
-                optimizedPath={simulationResult?.optimizedPath ?? []}
+                disruptionType={disruptionType}
+                originalGeojson={simulationResult?.originalGeojson}
+                safeGeojson={simulationResult?.safeGeojson}
+                originalPath={simulationResult?.originalGeojson ? [] : (simulationResult?.originalPath ?? [])}
+                optimizedPath={simulationResult?.safeGeojson ? [] : (simulationResult?.optimizedPath ?? [])}
                 simulationRunning={isRunning}
+                bbox={simulationResult?.bbox}
               />
             </div>
           </div>
@@ -260,6 +300,8 @@ export default function DisruptionsPage() {
                 simulationResult={simulationResult}
                 disruptionType={disruptionType}
                 isRunning={isRunning}
+                origin={origin}
+                destination={destination}
               />
             </div>
           </div>

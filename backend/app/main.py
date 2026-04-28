@@ -53,7 +53,7 @@ app.add_middleware(
 )
 
 # Register the router
-app.include_router(disruptions.router, prefix="/api", tags=["Disruptions"])
+app.include_router(disruptions.router, prefix="/api/disruptions", tags=["Disruptions"])
 
 # Health-check endpoint
 @app.get("/")

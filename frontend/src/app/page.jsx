@@ -3,11 +3,12 @@
 import Sidebar from "../components/layout/Sidebar";
 import MapComponent from "../components/map/MapComponent";
 
-import { useState, useEffect } from "react"; // <-- Add useEffect here
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Package,
   ShieldAlert,
   Leaf,
+  GitBranch,
   ChevronRight,
   Clock,
   RefreshCw,
@@ -23,96 +24,79 @@ import {
 // MOCK DATA
 // ─────────────────────────────────────────────
 
+// Pre-built GeoJSON for the Mumbai→Nashik Kasara Ghat scenario (TRK-001)
+// Shown immediately on load — no backend poll needed for the demo
+const TRK001_ORIGINAL = {
+  type:"Feature",
+  geometry:{ type:"LineString", coordinates:[
+    [72.8777,19.0760],[72.9780,19.2180],[73.1640,19.2960],
+    [73.4750,19.6430],[73.5530,19.7060],[73.7898,19.9975]
+  ]}
+};
+const TRK001_SAFE = {
+  type:"Feature",
+  geometry:{ type:"LineString", coordinates:[
+    [72.8777,19.0760],[72.9780,19.2180],[73.0540,19.3540],
+    [73.1360,19.6540],[73.3210,19.8210],[73.7898,19.9975]
+  ]}
+};
 const MOCK_TRUCKS = [
-  { id: "TRK-001", lat: 28.6139, lng: 77.209, status: "on-time",  destination: "Delhi Warehouse, NH-44" },
-  { id: "TRK-002", lat: 19.076,  lng: 72.8777, status: "at-risk",  destination: "Mumbai Port, JNPT" },
-  { id: "TRK-003", lat: 12.9716, lng: 77.5946, status: "delayed",  destination: "Bengaluru Hub, ORR" },
-  { id: "TRK-004", lat: 22.5726, lng: 88.3639, status: "on-time",  destination: "Kolkata ICD, NH-12" },
-  { id: "TRK-005", lat: 17.385,  lng: 78.4867, status: "delayed",  destination: "Hyderabad FC, ORR W" },
-  { id: "TRK-006", lat: 26.9124, lng: 75.7873, status: "on-time",  destination: "Jaipur DC, NH-48" },
-  { id: "TRK-007", lat: 23.0225, lng: 72.5714, status: "at-risk",  destination: "Ahmedabad CEZ, NH-8" },
-  { id: "TRK-008", lat: 13.0827, lng: 80.2707, status: "on-time",  destination: "Chennai Port, Ennore" },
+  { id:"TRK-001", lat:19.0760, lng:72.8777, status:"at-risk", destination:"Nashik FC, NH160", original_geojson:TRK001_ORIGINAL, safe_geojson:null, mode:"terrestrial", action:"IMMEDIATE REROUTE via Wada Bypass" },
+  { id:"IND-S-884", lat:12.9716, lng:77.5946,  status:"delayed", destination:"Bengaluru Hub, ORR" },
+  { id:"IND-E-902", lat:22.5726, lng:88.3639,  status:"on-time", destination:"Kolkata ICD, NH-12" },
+  { id:"IND-S-771", lat:17.385,  lng:78.4867,  status:"delayed", destination:"Hyderabad FC, ORR W" },
+  { id:"IND-N-334", lat:26.9124, lng:75.7873,  status:"on-time", destination:"Jaipur DC, NH-48" },
+  { id:"TRK-008", lat:13.0827, lng:80.2707,  status:"on-time", destination:"Chennai Port, Ennore" },
 ];
 
 const MOCK_ALERTS = [
   {
-    id: "ALT-001",
-    severity: "critical",
-    icon: "🌧️",
-    title: "Heavy rain on NH-48",
-    detail: "Gemini predicts 94mm rainfall · ETA impact +2.4h · 2 trucks affected",
-    time: "2 min ago",
-    trucks: ["TRK-002", "TRK-007"],
+    id:"ALT-DEMO-01", severity:"critical", icon:"🚨",
+    title:"Mumbai–Nashik Route Deviation: Shahapur Accident",
+    detail:"Local News + Open-Meteo confirm major accident on NH160 at Shahapur (19.4497°N, 73.3341°E). NHAI closed both lanes. Mapbox API executed DYNAMIC BYPASS for TRK-001. Stoppage of 4h 15m avoided.",
+    time:"Real-time", trucks:["TRK-001"],
+    center_lat:19.4497, center_lng:73.3341,
+    stoppage_details:{ duration:"4h 15m", reason:"Major accident detected via Local News", type:"Unplanned Stoppage Avoided", ai_action:"Dynamic API Deviation Executed" },
   },
   {
-    id: "ALT-002",
-    severity: "warning",
-    icon: "🚧",
-    title: "Road closure: NH-44 km 186",
-    detail: "Accident reported · OR-Tools rerouting TRK-001 via SH-57",
-    time: "11 min ago",
-    trucks: ["TRK-001"],
+    id:"ALT-DEMO-02", severity:"critical", icon:"🌀",
+    title:"Cyclone Alert: Arabian Sea",
+    detail:"GDACS Red Alert active. IMD tracking Cyclone 'Tej' at 18.2°N, 70.1°E, 145 km/h. AISstream shows 12 ships at anchor off JNPT. AI executing Slow Steam for SHP-992, ETA +31hrs.",
+    time:"4 min ago", trucks:["SHP-992"],
+    center_lat:19.5, center_lng:70.5,
+    stoppage_details:{ start_time:"06:14 AM", duration:"41.2 hrs (Est.)", type:"Maritime Corridor Closure", ai_action:"Slow Steam + Port Diversion to Mundra" },
   },
   {
-    id: "ALT-003",
-    severity: "warning",
-    icon: "🌫️",
-    title: "Dense fog advisory — Kolkata region",
-    detail: "Visibility < 50m until 08:00 IST · Low-speed protocol active",
-    time: "34 min ago",
-    trucks: ["TRK-004"],
+    id:"ALT-DEMO-03", severity:"warning", icon:"🚧",
+    title:"Road Block: NH-44 Nagpur",
+    detail:"Multi-vehicle collision near Nagpur bypass — 3 HGVs. TomTom shows 8km queue. TRK-004 rerouted via SH-269. ETA impact: +55 mins.",
+    time:"9 min ago", trucks:["TRK-004"],
   },
   {
-    id: "ALT-004",
-    severity: "info",
-    icon: "⛽",
-    title: "Fuel stop recommended: TRK-005",
-    detail: "Tank at 18% · Nearest approved station 14 km ahead",
-    time: "52 min ago",
-    trucks: ["TRK-005"],
+    id:"ALT-DEMO-04", severity:"warning", icon:"⚓",
+    title:"Port Congestion: JNPT Mumbai",
+    detail:"Vessel queue exceeds 18 ships. Berth wait 41hrs. Gemini recommends Mundra diversion. Cost delta: ₹2.1L.",
+    time:"18 min ago", trucks:["SHP-882", "SHP-991"],
   },
   {
-    id: "ALT-005",
-    severity: "info",
-    icon: "✅",
-    title: "TRK-008 arrived at Chennai Port",
-    detail: "Delivered on schedule · Dwell time estimate: 45 min",
-    time: "1 hr ago",
-    trucks: ["TRK-008"],
+    id:"ALT-DEMO-05", severity:"info", icon:"❄️",
+    title:"Cold Chain: Reefer Alert — TRK-003",
+    detail:"IoT spike: cargo bay 6.8°C (threshold 4°C) for 18 mins. Gemini root-causes traffic delay. Pre-cooling initiated at next depot.",
+    time:"34 min ago", trucks:["TRK-003"],
   },
 ];
 
 const KPI_CARDS = [
-  {
-    label: "Active Shipments",
-    value: "8",
-    sub: "↑ 2 since last hour",
-    trend: "up",
-    icon: Package,
-    accent: "blue",
-  },
-  {
-    label: "Disruptions Detected",
-    value: "4",
-    sub: "2 critical · 2 warnings",
-    trend: "down",
-    icon: ShieldAlert,
-    accent: "amber",
-  },
-  {
-    label: "Est. CO₂ Saved",
-    value: "1.84 t",
-    sub: "Via AI rerouting today",
-    trend: "neutral",
-    icon: Leaf,
-    accent: "emerald",
-  },
+  { label:"Active Shipments",    value:"8",    sub:"6 Road · 1 Maritime · 1 Air",     trend:"neutral", icon:Package,    accent:"blue"    },
+  { label:"Disruptions Detected", value:"2",    sub:"Kasara Ghat + Arabian Sea",        trend:"up",      icon:ShieldAlert, accent:"amber"   },
+  { label:"Deviations Executed",  value:"2",    sub:"OR-Tools reroutes active",          trend:"up",      icon:GitBranch,   accent:"violet"  },
+  { label:"Est. CO₂ Saved",       value:"4.2 t",sub:"Via AI Route Optimisation",         trend:"up",      icon:Leaf,        accent:"emerald" },
 ];
-
 const ACCENT = {
-  blue:    { bg: "bg-[#0ea5e9]/10", border: "border-[#0ea5e9]/20", icon: "text-[#38bdf8]", val: "text-[#38bdf8]" },
-  amber:   { bg: "bg-amber-500/10",  border: "border-amber-500/20",  icon: "text-amber-400",  val: "text-amber-400"  },
-  emerald: { bg: "bg-emerald-500/10",border: "border-emerald-500/20",icon: "text-emerald-400",val: "text-emerald-400"},
+  blue:    { bg:"bg-[#0ea5e9]/10",   border:"border-[#0ea5e9]/20",   icon:"text-[#38bdf8]",  val:"text-[#38bdf8]"  },
+  amber:   { bg:"bg-amber-500/10",   border:"border-amber-500/20",   icon:"text-amber-400",  val:"text-amber-400"  },
+  violet:  { bg:"bg-violet-500/10",  border:"border-violet-500/20",  icon:"text-violet-400", val:"text-violet-400" },
+  emerald: { bg:"bg-emerald-500/10", border:"border-emerald-500/20", icon:"text-emerald-400",val:"text-emerald-400" },
 };
 
 const SEV_STYLES = {
@@ -132,58 +116,129 @@ const TREND_ICON = {
 // ─────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [selectedTruck, setSelectedTruck] = useState(null);
-  const [alertFilter, setAlertFilter] = useState("all");
-  const [liveTrucks, setLiveTrucks] = useState(MOCK_TRUCKS); // Starts with mocks so the screen isn't blank
-  const [liveAlerts, setLiveAlerts] = useState(MOCK_ALERTS); 
-  const [isLoading, setIsLoading] = useState(false);
-  // Start with a static placeholder so server and client match perfectly
-  const [lastRefresh, setLastRefresh] = useState("--:--:--");
+  const [selectedTruck,  setSelectedTruck]  = useState(null);
+  const [alertFilter,    setAlertFilter]    = useState("all");
+  const [liveTrucks,     setLiveTrucks]     = useState(MOCK_TRUCKS); // original route shown on load
+  const [liveAlerts,     setLiveAlerts]     = useState(MOCK_ALERTS);
+  const [isLoading,      setIsLoading]      = useState(false);
+  const [lastRefresh,    setLastRefresh]    = useState("--:--:--");
+  const [kpiCards,       setKpiCards]       = useState(KPI_CARDS);
+  const [showToast,      setShowToast]      = useState(false);
 
-  // Once the page loads in the browser, update it to the real time
+  // Tracks the Stage-2 GNN reveal timer so cleanup can cancel it on unmount
+  const revealTimerRef = useRef(null);
+
+  // Set real clock on mount
   useEffect(() => {
-    setLastRefresh(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" }));
+    setLastRefresh(new Date().toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", second:"2-digit" }));
   }, []);
-  // 2. The Integration Function (Hits your FastAPI backend)
-  const fetchLiveLogistics = async () => {
-  setIsLoading(true);
-  try {
-    const res = await fetch("http://localhost:8000/api/trigger-live-hunt"); 
-    const data = await res.json();
-    
-    if (data.routing_engine_decision?.fleet_status) {
-      const updatedTrucks = data.routing_engine_decision.fleet_status.map(t => ({
-        id: t.truck_id,
-        lat: t.lat, 
-        lng: t.lng,
-        status: t.action.includes("REROUTE") ? "at-risk" : t.action.includes("HOLD") ? "delayed" : "on-time",
-        destination: t.cargo, 
-        action: t.action,
-        mode: t.mode,           // IMPORTANT: Needed for map layer styling
-        safe_geojson: t.safe_geojson, // IMPORTANT: The physical route line
-        estimated_cost: t.estimated_cost // IMPORTANT: For the popup card
-      }));
-      setLiveTrucks(updatedTrucks);
-    }
 
-    if (data.active_threats) {
-      const updatedAlerts = data.active_threats.map((threat, index) => ({
-        id: `LIVE-ALT-${index}`,
-        severity: "critical",
-        icon: "🚨",
-        title: threat.location,
-        detail: "Preemptive disruption detected via spatial indexing.",
-        geojson_polygon: threat.geojson_polygon, // IMPORTANT: The red threat zone
-        time: "Just now",
-        trucks: data.routing_engine_decision?.fleet_status
-          ?.filter(t => !t.action.includes("PROCEED NORMALLY"))
-          .map(t => t.truck_id) || []
-      }));
-      setLiveAlerts(updatedAlerts);
+  // fetchLiveLogistics — manual Refresh click triggers the GNN ripple reveal:
+  //   Stage 1 (instant): sea route line appears, SHP-991 looks ON-TIME — no drama
+  //   Stage 2 (5 s later): vessel flips to OPTIMIZED + both GNN pins drop + metrics show
+  const fetchLiveLogistics = useCallback(async () => {
+    // Cancel any previous pending Stage-2 timer
+    if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+
+    setIsLoading(true);
+    try {
+      const res = await fetch("http://localhost:8000/api/trigger-live-hunt");
+      if (!res.ok) throw new Error(`Backend returned ${res.status}`);
+      const data = await res.json();
+
+      const fleetStatus = data.routing_engine_decision?.fleet_status ?? [];
+
+      // ── STAGE 1 (Instant): Draw sea route, but SHP-991 looks normal ────────
+      setLiveTrucks(fleetStatus.map(t => ({
+        id:               t.truck_id,
+        lat:              t.lat,
+        lng:              t.lng,
+        // Override SHP-991 to ON-TIME so no red pin yet
+        status:           t.truck_id === "SHP-991" ? "on-time"
+                            : t.action?.includes("REROUTE") ? "at-risk"
+                            : t.action?.includes("HOLD")   ? "delayed" : "on-time",
+        destination:      t.cargo,
+        action:           t.truck_id === "SHP-991" ? "En Route — Normal Operations" : t.action,
+        mode:             t.mode,
+        original_geojson: t.original_geojson,
+        safe_geojson:     t.truck_id === "SHP-991" ? t.safe_geojson : null, // Hide the detour for trucks, but draw the sea route for the ship
+        metrics:          null,              // metrics hidden in Stage 1
+        estimated_cost:   t.estimated_cost,
+      })));
+      setLiveAlerts([]);  // no pins in Stage 1
+
+      // ── STAGE 2 (5-second delay): GNN ripple effect reveals ───────────────
+      revealTimerRef.current = setTimeout(() => {
+        setShowToast(true);
+        setTimeout(() => setShowToast(false), 6000);
+        
+        // Re-map fleet: SHP-991 flips to OPTIMIZED with full metrics
+        setLiveTrucks(fleetStatus.map(t => ({
+          id:               t.truck_id,
+          lat:              t.lat,
+          lng:              t.lng,
+          status:           t.truck_id === "SHP-991" ? "optimized"
+                              : t.action?.includes("REROUTE") ? "at-risk"
+                              : t.action?.includes("HOLD")   ? "delayed" : "on-time",
+          destination:      t.cargo,
+          action:           t.action,
+          mode:             t.mode,
+          original_geojson: t.original_geojson,
+          safe_geojson:     t.safe_geojson,
+          metrics:          t.metrics ?? null,  // ← fuel_saved, cost_saved, ETA now visible
+          estimated_cost:   t.estimated_cost,
+        })));
+
+        // Drop both GNN alert pins simultaneously
+        if (data.active_threats?.length > 0) {
+          const mappedAlerts = (data.active_threats || []).map((threat, index) => ({
+            id: threat.id || `LIVE-ALT-${index}`,
+            severity: (threat.severity || "warning").toLowerCase(),
+            icon: threat.icon || (threat.severity === "INFO" ? "🟡" : "🚨"),
+            title: threat.location || "Unknown Disruption",
+            detail: threat.stoppage_details?.action || threat.stoppage_details?.reason || threat.description || "System processing...",
+            geojson_polygon: threat.geojson_polygon || null,
+            center_lat: threat.center_lat || threat.lat,
+            center_lng: threat.center_lng || threat.lng,
+            stoppage_details: threat.stoppage_details || null,
+            timestamp: threat.timestamp || null,
+            time: threat.timestamp || new Date().toLocaleTimeString(),
+            trucks: threat.id?.includes("GNN") ? ["SHP-991"] : ["TRK-001"],
+            lat: threat.lat,
+            lng: threat.lng
+          }));
+          setLiveAlerts(mappedAlerts);
+        }
+
+        const shp = fleetStatus.find(t => t.truck_id === "SHP-991");
+        if (shp && shp.metrics) {
+          setKpiCards([
+            { label:"Active Shipments",    value:"8",    sub:"6 Road · 1 Maritime · 1 Air",     trend:"neutral", icon:Package,    accent:"blue"    },
+            { label:"Disruptions Detected", value:"3",    sub:"GNN + API alerts active",        trend:"up",      icon:ShieldAlert, accent:"amber"   },
+            { label:"Deviations Executed",  value:"2",    sub:"OR-Tools + Slow Steaming",          trend:"up",      icon:GitBranch,   accent:"violet"  },
+            { label:"Fuel & Cost Saved",   value: shp.metrics.fuel_saved, sub:`${shp.metrics.cost_saved} via Optimization`, trend:"up",      icon:Leaf,        accent:"emerald" },
+          ]);
+        }
+
+        setLastRefresh(new Date().toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", second:"2-digit" }));
+      }, 5000);
+
+    } catch (err) {
+      console.error("Live hunt failed — keeping mock data:", err);
+    } finally {
+      setIsLoading(false);
     }
-  } catch (error) { console.error(error); } 
-  finally { setIsLoading(false); }
-};
+  }, []);
+
+  // No auto-polling — user clicks Refresh to trigger the GNN ripple reveal
+  // Cleanup cancels any pending Stage-2 timer on unmount
+  useEffect(() => {
+    setLastRefresh(new Date().toLocaleTimeString("en-IN", { hour:"2-digit", minute:"2-digit", second:"2-digit" }));
+    return () => {
+      if (revealTimerRef.current) clearTimeout(revealTimerRef.current);
+    };
+  }, []);
+
   const filteredAlerts =
     alertFilter === "all"
       ? liveAlerts
@@ -236,8 +291,8 @@ export default function DashboardPage() {
         </header>
 
         {/* ── KPI row ── */}
-        <section className="grid grid-cols-3 gap-3 px-5 pt-4 pb-3 shrink-0">
-          {KPI_CARDS.map(({ label, value, sub, trend, icon: Icon, accent }) => {
+        <section className="grid grid-cols-4 gap-3 px-5 pt-4 pb-3 shrink-0">
+          {kpiCards.map(({ label, value, sub, trend, icon: Icon, accent }) => {
             const a = ACCENT[accent];
             return (
               <div
@@ -416,6 +471,21 @@ export default function DashboardPage() {
 
           </div>
         </div>
+
+        {/* Autonomous Dispatch Toast */}
+        <div className={`absolute bottom-6 right-6 z-50 transition-all duration-500 transform ${showToast ? 'translate-y-0 opacity-100' : 'translate-y-10 opacity-0 pointer-events-none'}`}>
+          <div className="bg-[#0b0f1a] border border-emerald-500/40 rounded-xl p-4 shadow-[0_0_20px_rgba(16,185,129,0.15)] flex items-start gap-3 w-80">
+            <div className="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center flex-shrink-0 mt-0.5 animate-pulse">
+              <span className="text-emerald-400 text-lg">📱</span>
+            </div>
+            <div>
+              <p className="text-emerald-400 text-xs font-bold uppercase tracking-widest mb-0.5">Zero-Touch Dispatch</p>
+              <p className="text-white text-sm font-semibold leading-tight">Recommendation sent to Rajesh (TRK-001)</p>
+              <p className="text-[#94a3b8] text-[10px] mt-1 line-clamp-2">"Major Accident detected. Follow Mapbox OR-Tools bypass via Wada."</p>
+            </div>
+          </div>
+        </div>
+
       </main>
     </div>
   );
