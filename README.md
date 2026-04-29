@@ -6,6 +6,7 @@
 ---
 
 ## 📺 [Watch the Video Submission](https://drive.google.com/drive/folders/1ZWnPNqls9krx2UZ_sMipdt4N56hq1064)
+Website Link - https://logisense-ai-1.onrender.com
 
 ---
 
@@ -74,10 +75,6 @@ logisense-ai/
 
 ---
 
-## 🔗 Live Demo Links
-*   **Frontend (Dashboard):** `https://logisense-ai.onrender.com` (Static Site)
-*   **Backend (API Core):** `https://logisense-ai-backend.onrender.com`
-*   **API Documentation:** `https://logisense-ai-backend.onrender.com/docs`
 
 ---
 
